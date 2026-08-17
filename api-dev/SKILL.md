@@ -1,17 +1,27 @@
 ---
 name: api-dev
-description: Инструкции для разработки и тестирования API (SberBusiness, PHP/Symfony)
+description: Инструкции для разработки и тестирования API (SberBusiness, PHP/Symfony): пути на dev-сервере, запуск тестов, release-деплой, кеш/opcache, debug-логи, типовые проблемы.
 ---
 
 # API Dev — Инструкции для разработки и тестирования
 
-При активации также загрузи навык jivo-dev-testing — там общие инструкции по удаленному тестированию через tmux.
+При активации также загрузи навык jivo-dev-testing — там общая tmux-механика
+для удаленного тестирования на dev-серверах Jivo.
 
 ## Путь проекта на dev сервере
 
 ```
 /var/www/api/current/api/
 ```
+
+## Release-based deployment
+
+Код на dev сервере лежит в `/var/www/api/releases/`, симлинк `current` указывает на активный релиз:
+```
+/var/www/api/current -> /var/www/api/releases/API_xxx.xxxxxxxxx
+```
+
+Файлы проекта — в `/var/www/api/current/api/`. Изменения в локальной директории разработки **не отражаются** на сервере — все правки нужно делать через tmux в release-директории.
 
 ## Команды
 
@@ -59,9 +69,19 @@ sudo systemctl restart php85-php-fpm
 - Мок загружается только в dev-окружении (`SberExtension.php`, проверка `Environment::isDev`)
 - Поле `inn` должно быть уникальным — используй timestamp
 
+## Debug-логи
+
+Для отладки без Graylog используй `file_put_contents` в `var/tmp/sber_debug.log` (относительный путь от корня проекта). Пример:
+```php
+file_put_contents('var/tmp/debug.log', sprintf("[%s] ...\n", date('H:i:s')), FILE_APPEND);
+```
+
+Директория `var/tmp/` должна существовать и быть доступна для записи.
+Детальные правила записи логов — в скилле `file-log-debug`.
+
 ## Типовые проблемы и решения
 
 1. **"Пожалуйста, попробуйте ещё раз"** — ошибка в `ProcessSignUpService::process()`. Проверь debug-лог в `var/tmp/sber_debug.log`.
 2. **Duplicate entry** — уникальные поля (`inn`, `sub`). Добавь timestamp к значению.
-3. **Opcache** — после изменения файлов перезапусти php-fpm.
+3. **Opcache** — после изменения PHP-файлов старые версии могут быть закешированы. Решение: `sudo systemctl restart php85-php-fpm`.
 4. **Симлинк current** — релизы деплоятся в `/var/www/api/releases/`, `current` — это symlink. Правки нужно делать через него.
