@@ -14,18 +14,20 @@ description: Запасной веб-поиск через DuckDuckGo. Испо�
    - Для чтения страницы по URL используй `duckduckgo_fetch_content` (`url`, `max_length`, `start_index`). Никогда не открывай `file://` и локальные пути.
    - Если MCP-поиск вернул пусто или ошибку — переходи к шагу 2.
 
-2. **MCP нет или не сработал — используй установленную python-библиотеку `ddgs`** через скрипт в папке скилла:
+2. **MCP нет или не сработал — используй установленную python-библиотеку `ddgs`** через скрипт в папке скилла (путь `~` раскрывается bash на любом хосте):
 
-   python3 /home/nikita/.config/opencode/skills/ddg-search/ddg.py "<запрос>" max_results region
+   python3 ~/.config/opencode/skills/ddg-search/ddg.py "<запрос>" max_results region
 
 Пример:
-   python3 /home/nikita/.config/opencode/skills/ddg-search/ddg.py "последние новости ИИ 2026" 5 ru-ru
+   python3 ~/.config/opencode/skills/ddg-search/ddg.py "последние новости ИИ 2026" 5 wt-wt
 
 Скрипт выводит JSON-массив с `title`, `href`, `body`.
 
 ## Примечания
 
 - Перед первым использованием проверь, что пакет установлен: `python3 -c "from ddgs import DDGS"`. Если `ModuleNotFoundError` — установи его в тот же python: `python3 -m pip install --user ddgs` (или `--break-system-packages` на Debian при externally-managed).
+- Регион `ru-ru` не работает из РФ (backend auto уводит на yahoo → таймаут, принудительный duckduckgo → No results found). Используй только `wt-wt`.
+- Скрипт сам перебирает бэкенды `duckduckgo` → `mojeek` → `brave` при пустом результате/ошибке — дополнительные действия не нужны.
 - Задержку между запросами библиотека делает сама — не добавляй паузы.
 - Пустой результат или ошибка `anomaly/blocked` — повтори запрос с другой формулировкой, поменяй регион или уменьши `max_results`.
 - Не пытайся заменить поиск через `webfetch` на `html.duckduckgo.com`/`lite.duckduckgo.com` — из РФ они отдают антикапчу (anomaly), это проверено.

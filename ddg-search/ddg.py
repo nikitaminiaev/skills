@@ -5,6 +5,23 @@ import sys
 
 from ddgs import DDGS
 
+BACKENDS = ["duckduckgo", "mojeek", "brave"]
+
+
+def search(query, max_results, region):
+    last_error = None
+    for backend in BACKENDS:
+        try:
+            rows = DDGS().text(query, max_results=max_results, region=region, backend=backend)
+        except Exception as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
+            continue
+        if rows:
+            return rows
+    if last_error:
+        raise RuntimeError(last_error)
+    return None
+
 
 def main():
     if len(sys.argv) < 2:
@@ -16,7 +33,7 @@ def main():
     region = sys.argv[3] if len(sys.argv) > 3 else "wt-wt"
 
     try:
-        rows = DDGS().text(query, max_results=max_results, region=region)
+        rows = search(query, max_results, region)
     except Exception as exc:
         print(json.dumps({"error": f"{type(exc).__name__}: {exc}"}, ensure_ascii=False))
         return 1
