@@ -55,3 +55,7 @@ pdftotext '/tmp/opencode/book.pdf' '/tmp/opencode/book.txt'
 1. Search for a book via `/api/search` with the desired query
 2. Pick a result, note its `md5`
 3. Download the file via `/api/file/{md5}`
+
+## Download policy
+
+Не стесняться скачивать книги в `/tmp/opencode/` для исследования текущего вопроса — это штатный способ сверить утверждения заметок с первоисточниками. Скачивание в `/tmp/opencode/` разрешено и в plan mode (read-only для рабочей директории, но не для временной). После скачивания извлечь текст `pdftotext` и искать по нему; при необходимости указать пути и номера строк из `.txt` в ответе. Файлы в `/tmp/opencode/books/` считаются временными и не коммитятся.
