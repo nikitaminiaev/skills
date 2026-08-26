@@ -103,4 +103,4 @@ pdftotext '/tmp/opencode/book.pdf' '/tmp/opencode/book.txt'
 
 ## Download policy
 
-Не стесняться скачивать книги в `/tmp/opencode/` для исследования текущего вопроса — это штатный способ сверить утверждения заметок с первоисточниками. Скачивание в `/tmp/opencode/` разрешено и в plan mode (read-only для рабочей директории, но не для временной). После скачивания извлечь текст `pdftotext` и искать по нему; при необходимости указать пути и номера строк из `.txt` в ответе. Файлы в `/tmp/opencode/books/` считаются временными и не коммитятся.
+Feel free to download books and articles into `/tmp/opencode/` to verify claims against primary sources — this is the standard workflow. Downloads to `/tmp/opencode/` are allowed even in plan mode (read-only for the working directory, but not for temp). After downloading, extract text with `pdftotext` and search it; include file paths and line numbers from the `.txt` in your response when relevant. Files in `/tmp/opencode/` are considered temporary and must not be committed.
