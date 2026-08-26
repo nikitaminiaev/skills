@@ -44,6 +44,45 @@ GET /api/file/{md5}
 curl --fail --location --output '/tmp/opencode/book.pdf' 'http://192.168.0.153:8000/api/file/abc123def456...'
 ```
 
+### Search scientific articles
+
+```
+GET /api/scimag/search?q={query}&limit=20&offset=0
+```
+
+**Parameters:**
+- `q` — search query (required)
+- `limit` — results per page (default 20)
+- `offset` — pagination offset (default 0)
+
+**Note:** All 82M+ articles indexed; there is no file on disk — downloading returns 404.
+
+**Example via curl:**
+```bash
+curl --fail --location 'http://192.168.0.153:8000/api/scimag/search?q=transformer+attention&limit=5'
+```
+
+**Example via webfetch:**
+```
+http://192.168.0.153:8000/api/scimag/search?q=transformer+attention&limit=5
+```
+
+### Download scientific article
+
+```
+GET /api/scimag/file/{id}
+```
+
+**Parameters:**
+- `id` — article ID from scimag search results
+
+Streams the article from the underlying zip archive in 256 KB chunks. Falls back to member matching via `unquote` when direct ID lookup fails.
+
+**Example:**
+```bash
+curl --fail --location --output '/tmp/opencode/article.pdf' 'http://192.168.0.153:8000/api/scimag/file/12345678'
+```
+
 ### Extract text from PDF (optional)
 
 ```bash
@@ -52,9 +91,15 @@ pdftotext '/tmp/opencode/book.pdf' '/tmp/opencode/book.txt'
 
 ## Typical workflow
 
+**Books:**
 1. Search for a book via `/api/search` with the desired query
 2. Pick a result, note its `md5`
 3. Download the file via `/api/file/{md5}`
+
+**Scientific articles (scimag):**
+1. Search for an article via `/api/scimag/search` with the desired query
+2. Pick a result, note its `id`
+3. Stream the article via `/api/scimag/file/{id}`
 
 ## Download policy
 
