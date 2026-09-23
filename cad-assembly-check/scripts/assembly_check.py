@@ -3,10 +3,13 @@
 Универсальная проверка CAD-сборки (build123d/OCP).
 Скопируй в проект рядом со сборкой, заполни CONFIG, гоняй при каждом изменении геометрии.
 
-Три проверки:
+Пять проверок:
   1. INTERFERENCE — попарно, ноль пересечений (кроме ALLOWED-контактов);
   2. FITS        — min-дистанция посадок против номинала;
-  3. CHANNEL     — зонд-цилиндр вдоль оси луча/жгута/вала свободен кроме TRANSPARENT.
+  3. SUPPORT     — заявленные несущие контакты РЕАЛЬНО касаются (ловит «висящие» детали);
+  4. LOCKS       — замок (байонет/фланец) держит: при малом осевом сдвиге без доворота
+                   деталь упирается (ловит «лапка не в канавке», «замок не собран»);
+  5. CHANNEL     — зонд-цилиндр вдоль оси луча/жгута/вала свободен кроме TRANSPARENT.
 
 Сборка должна раздавать build_parts() -> {имя: Shape} в мировых координатах
 (сложный узел — одной деталью-Compound).
@@ -31,15 +34,22 @@ TIGHT_TOL = 0.2                # зазор меньше номинала на �
 LOOSE_TOL = 0.5                # зазор больше номинала на это -> WARN "болтается"
 
 # Пары, которые СПЕЦИАЛЬНО соприкасаются/вложены (посадка по замыслу).
-# Имена — как в build_parts(). Примеры:
-#   frozenset({"nut_top_1", "top_plate"})       гайка под плитой
-#   frozenset({"objective", "rms_adapter"})     объектив в расточке
-#   frozenset({"substrate_slide", "substrate_holder"})
 ALLOWED = set()
 
 # Посадки: (имя1, имя2, номинал_мм, комментарий).
 # Мерить ТОЛЬКО радиальные посадки без лицевого контакта (см. reference.md).
 FITS = []
+
+# Несущие контакты: (имя1, имя2, мин_площадь_мм2, что это). Проверка SUPPORT:
+# площадь = макс. объём пересечения при сдвиге детали на 0.15 мм к партнёру / 0.15.
+# Сюда — всё, на чём что-то стоит/лежит: плита→пьедестал, труба→держатель, …
+SUPPORT = []
+
+# Замки: (верхняя_деталь, нижняя_деталь, (dx,dy,dz) мм, что это). Проверка LOCKS:
+# малый сдвиг вдоль оси снятия (0.5 мм) — пересечение > LOCK_MIN значит лапка/бурт
+# упирается в канавку/стенку, т.е. замок собран. Для байонета, винтовых буртов.
+LOCKS = []
+LOCK_MIN = 0.3                 # мм^3: меньше — замок «не упирается»
 
 # Трасса светового канала: (x, y, z0, z1) вдоль Z + радиус зонда + прозрачные тела.
 CHANNEL_AXIS = None            # напр. (120, 120, 74, 419)
@@ -74,6 +84,16 @@ def min_dist(a, b):
     return dss.Value()
 
 
+def contact_area(a, b, probe=0.15):
+    """Оценка площади контакта: макс. объём пересечения при сдвиге a на probe
+    по ±X/±Y/±Z, делённый на probe."""
+    best = 0.0
+    for d in ((probe, 0, 0), (-probe, 0, 0), (0, probe, 0), (0, -probe, 0),
+              (0, 0, probe), (0, 0, -probe)):
+        best = max(best, inter_volume(Pos(*d) * a, b) / probe)
+    return best
+
+
 def check_interference(parts, report, counters):
     names = list(parts)
     pairs = 0
@@ -103,6 +123,32 @@ def check_fits(parts, report, counters):
             tag = "[WARN: болтается]"
             counters["warn"] += 1
         report.append(f"  {na:20s} - {nb:20s} : {d:5.2f} мм (ждём {expected:.2f}) {what} {tag}")
+
+
+def check_support(parts, report, counters):
+    for na, nb, min_s, what in SUPPORT:
+        if na not in parts or nb not in parts:
+            report.append(f"  [SKIP] {na} - {nb}: детали не найдены в сборке")
+            continue
+        s = contact_area(parts[na], parts[nb])
+        if s < min_s:
+            counters["fail"] += 1
+            report.append(f"  [FAIL] {na:20s} - {nb:20s} : S~{s:7.1f} мм^2 (мин {min_s}) {what}")
+            continue
+        report.append(f"  {na:20s} - {nb:20s} : S~{s:7.1f} мм^2 {what}  [OK]")
+
+
+def check_locks(parts, report, counters):
+    for a, b, d, what in LOCKS:
+        if a not in parts or b not in parts:
+            report.append(f"  [SKIP] {a} / {b}: детали не найдены в сборке")
+            continue
+        v = inter_volume(Pos(*d) * parts[a], parts[b])
+        if v < LOCK_MIN:
+            counters["fail"] += 1
+            report.append(f"  [FAIL] {a:20s} / {b:20s} : сдвиг {d} -> V={v:.2f} мм^3 — замок не держит?")
+            continue
+        report.append(f"  {a:20s} / {b:20s} : сдвиг {d} -> V={v:6.2f} мм^3 {what}  [OK]")
 
 
 def check_channel(parts, report, counters):
@@ -159,7 +205,15 @@ def main():
     report.append("-" * 30)
     check_fits(parts, report, counters)
 
-    report.append("\n[3] CHANNEL (трасса вдоль оси)")
+    report.append("\n[3] SUPPORT (несущие контакты реально касаются)")
+    report.append("-" * 30)
+    check_support(parts, report, counters)
+
+    report.append("\n[4] LOCKS (замок держит без доворота)")
+    report.append("-" * 30)
+    check_locks(parts, report, counters)
+
+    report.append("\n[5] CHANNEL (трасса вдоль оси)")
     report.append("-" * 30)
     check_channel(parts, report, counters)
 
