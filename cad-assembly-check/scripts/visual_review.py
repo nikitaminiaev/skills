@@ -72,6 +72,15 @@ CUTS = [
     ("clip y<0, вид с +Y", 1, 120.0, True, 2, 90),
 ]
 
+# Zoom-лист: критичные места крупным планом (метка, центр (x,y,z), полуразмер).
+# Заполнять по итогам FITS/SUPPORT-пар и прошлых багов: каждая посадка, которую
+# числовая проверка меряет, должна иметь свою зону здесь (глаз видит «болт мимо
+# паза», «торец в ноль», чего не видно на общих изометриях). Пустая панель в
+# листе = детали в зоне нет (тоже баг).
+ZOOMS = [
+    # ("ухо N: вилка + болт", (125, 175, 12), (20, 16, 16)),
+]
+
 MAX_FACES = None  # decimate цель на деталь; None = полная сетка
 OUT_DIRNAME = "preview"   # каталог листов: _resurses/preview если есть, иначе <dir>/preview
 # ================================================================
@@ -249,6 +258,38 @@ def sheet_sections(meshes, out_path):
     plt.close(fig)
 
 
+def zone_tris(tris, center, half):
+    """Грани, чей центроид внутри бокса зоны (центр ± полуразмер)."""
+    c = tris.mean(axis=1)
+    lo, hi = np.array(center) - half, np.array(center) + half
+    return tris[np.all((c >= lo) & (c <= hi), axis=1)]
+
+
+def sheet_zoom(meshes, out_path):
+    """Zoom-лист: каждая зона из ZOOMS — изо + вид сверху крупным планом.
+    Пустая панель (красная метка) = детали в зоне нет."""
+    views = [("изо", 25, -60), ("сверху", 89, -90)]
+    fig = plt.figure(figsize=(10, 4.2 * max(len(ZOOMS), 1)))
+    for row, (label, center, half) in enumerate(ZOOMS):
+        clipped = {n: zone_tris(v[f], center, half) for n, (v, f) in meshes.items()}
+        ntris = sum(len(t) for t in clipped.values())
+        for col, (vlabel, elev, azim) in enumerate(views, 1):
+            ax = fig.add_subplot(len(ZOOMS), 2, row * 2 + col, projection="3d")
+            for name, tris in clipped.items():
+                if len(tris):
+                    add_part(ax, tris, color_of(name), edge="#333333", lw=0.15)
+            lo, hi = np.array(center) - half, np.array(center) + half
+            set_view(ax, lo, hi, elev, azim, ticks=False)
+            flag = "" if ntris else "  [ПУСТО?]"
+            ax.set_title(f"{label} — {vlabel}{flag}", fontsize=10,
+                         color="red" if not ntris else "black")
+    fig.suptitle("Zoom-лист: критичные места крупным планом (изо + сверху)",
+                 fontsize=13)
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    fig.savefig(out_path, dpi=110)
+    plt.close(fig)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("dir", nargs="?", default=os.path.dirname(os.path.abspath(__file__)))
@@ -269,6 +310,8 @@ def main():
     sheet_assembly(meshes, os.path.join(out, "visual_assembly.png"))
     sheet_parts(meshes, parts, os.path.join(out, "visual_parts.png"))
     sheet_sections(meshes, os.path.join(out, "visual_sections.png"))
+    if ZOOMS:
+        sheet_zoom(meshes, os.path.join(out, "visual_zoom.png"))
     print("листы в", out)
 
 
