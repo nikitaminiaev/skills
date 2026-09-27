@@ -258,11 +258,43 @@ def sheet_sections(meshes, out_path):
     plt.close(fig)
 
 
+def _clip_poly(poly, lo, hi):
+    """Sutherland–Hodgman: выпуклый полигон против 6 плоскостей бокса [lo, hi]."""
+    for ax in range(3):
+        for bound, ge in ((lo[ax], True), (hi[ax], False)):
+            if not poly:
+                return []
+            out = []
+            n = len(poly)
+            for i in range(n):
+                a, b = poly[i], poly[(i + 1) % n]
+                da = (a[ax] - bound) if ge else (bound - a[ax])
+                db = (b[ax] - bound) if ge else (bound - b[ax])
+                ain, bin_ = da >= 0, db >= 0
+                if ain:
+                    out.append(a)
+                if ain != bin_:
+                    out.append(a + (da / (da - db)) * (b - a))
+            poly = out
+    return poly
+
+
 def zone_tris(tris, center, half):
-    """Грани, чей центроид внутри бокса зоны (центр ± полуразмер)."""
-    c = tris.mean(axis=1)
-    lo, hi = np.array(center) - half, np.array(center) + half
-    return tris[np.all((c >= lo) & (c <= hi), axis=1)]
+    """Треугольники, обрезанные боксом зоны (центр ± полуразмер).
+    Фильтр по центроиду НЕ годится: большая грань (дно плиты) имеет центроид
+    в зоне и вылезает на весь кадр — только геометрическая обрезка боксом
+    (выпуклый треугольник ∩ выпуклый бокс = выпуклый полигон, фан-триангуляция)."""
+    lo = np.asarray(center, dtype=float) - half
+    hi = np.asarray(center, dtype=float) + half
+    tb_lo, tb_hi = tris.min(axis=1), tris.max(axis=1)
+    cand = np.all(tb_hi >= lo, axis=1) & np.all(tb_lo <= hi, axis=1)
+    out = []
+    for t in tris[cand]:
+        poly = _clip_poly([t[0], t[1], t[2]], lo, hi)
+        if len(poly) >= 3:
+            out.extend([[poly[0], poly[i], poly[i + 1]]
+                        for i in range(1, len(poly) - 1)])
+    return np.array(out) if out else np.zeros((0, 3, 3))
 
 
 def sheet_zoom(meshes, out_path):
