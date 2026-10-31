@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__TITLE__</title>
+<style>
+:root{--bg:#eef0f3;--fg:#1b2026;--mut:#5b6670;--pan:#fffffff0;--acc:#2b62c9;--ok:#1d7a3a;--bad:#b3261e;--line:#8a949f33}
+@media (prefers-color-scheme:dark){:root{--bg:#14171b;--fg:#e7eaee;--mut:#9aa4ad;--pan:#1f242aee;--acc:#7aa2ff;--ok:#7bd88f;--bad:#ff8a80;--line:#ffffff1f}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font:14px/1.35 system-ui,"Segoe UI",Roboto,sans-serif}
+#view{position:fixed;inset:0}
+#view canvas{display:block}
+.bar{position:fixed;background:var(--pan);border-radius:9px;box-shadow:0 2px 10px #0002;backdrop-filter:blur(6px)}
+#top{left:10px;right:10px;top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:7px 10px;z-index:5}
+#top h1{font-size:14px;font-weight:600;margin:0 10px 0 0;white-space:nowrap}
+#top .sub{color:var(--mut);font-size:12px;margin-right:8px}
+button,select{font:inherit;font-size:13px;padding:3px 9px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--fg);cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.sep{width:1px;height:18px;background:var(--line);margin:0 4px}
+#bottom{left:10px;right:10px;bottom:10px;padding:8px 12px;z-index:5}
+#row{display:flex;align-items:center;gap:10px}
+#tm{flex:1;accent-color:var(--acc)}
+#tmLabel{font-variant-numeric:tabular-nums;color:var(--mut);font-size:12px;min-width:92px;text-align:right}
+#phase{font-weight:600;font-size:13px;margin-top:4px}
+#note{color:var(--mut);font-size:12.5px;margin-top:2px;min-height:17px}
+#side{position:fixed;right:10px;top:56px;bottom:96px;width:290px;overflow:auto;padding:10px 12px;display:none;z-index:4;background:var(--pan);border-radius:9px;box-shadow:0 2px 10px #0002}
+#side.on{display:block}
+#side h2{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:10px 0 5px;font-weight:600}
+#side h2:first-child{margin-top:0}
+.chk{display:flex;justify-content:space-between;gap:8px;padding:2px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.chk .v{font-variant-numeric:tabular-nums;white-space:nowrap}
+.ok{color:var(--ok)}.bad{color:var(--bad);font-weight:600}
+.par{display:flex;justify-content:space-between;gap:8px;padding:1px 0;font-size:12.5px;color:var(--mut)}
+.par b{color:var(--fg);font-weight:500;font-variant-numeric:tabular-nums}
+.lg{display:flex;align-items:center;gap:6px;padding:2px 0;font-size:12.5px;cursor:pointer;user-select:none}
+.lg i{width:11px;height:11px;border-radius:2px;display:inline-block;flex:0 0 auto;border:1px solid #0002}
+.lg.off{opacity:.35}
+#hint{position:fixed;left:12px;bottom:96px;color:var(--mut);font-size:11.5px;z-index:4}
+#err{position:fixed;inset:auto 10px 50% 10px;padding:14px;background:var(--bad);color:#fff;border-radius:8px;display:none;white-space:pre-wrap;font-family:monospace;z-index:9}
+</style>
+</head>
+<body>
+<div id="view"></div>
+
+<div id="top" class="bar">
+  <h1 id="title">—</h1><span class="sub" id="sub"></span>
+  <button id="play">▶ пуск</button>
+  <div class="sep"></div>
+  <span style="color:var(--mut);font-size:12px">скорость</span>
+  <button class="spd" data-s="0.1">0.1</button>
+  <button class="spd" data-s="0.25">0.25</button>
+  <button class="spd on" data-s="1">1</button>
+  <button class="spd" data-s="2">2</button>
+  <div class="sep"></div>
+  <span style="color:var(--mut);font-size:12px">камера</span>
+  <button class="cam" data-c="iso">изометрия</button>
+  <button class="cam" data-c="top">сверху</button>
+  <button class="cam" data-c="front">спереди</button>
+  <button class="cam" data-c="side">сбоку</button>
+  <div class="sep"></div>
+  <button id="clipBtn">разрез</button>
+  <select id="clipAxis" style="display:none"><option value="x">X</option><option value="y">Y</option><option value="z" selected>Z</option><option value="x-">−X</option><option value="y-">−Y</option><option value="z-">−Z</option></select>
+  <input id="clipPos" type="range" min="0" max="100" value="50" style="display:none;width:90px;accent-color:var(--acc)">
+  <div class="sep"></div>
+  <button id="panelBtn">панель</button>
+</div>
+
+<div id="side">
+  <h2>Проверки</h2><div id="checks"></div>
+  <h2>Параметры</h2><div id="params"></div>
+  <h2>Детали</h2><div id="legend"></div>
+</div>
+
+<div id="bottom" class="bar">
+  <div id="row">
+    <button id="restart">⟲</button>
+    <input id="tm" type="range" min="0" max="1000" value="0">
+    <span id="tmLabel">0.00 / 0.00 с</span>
+  </div>
+  <div id="phase"></div>
+  <div id="note"></div>
+</div>
+
+<div id="hint">мышь — вращать · колесо — масштаб · правая кнопка — сдвиг</div>
+<div id="err"></div>
+
+<script id="manifest" type="application/json">__MANIFEST__</script>
+<script id="frames" type="application/json">__FRAMES__</script>
+<script id="info" type="application/json">__INFO__</script>
+<script id="bin" type="application/octet-stream">__BIN__</script>
+
+<script>/*THREE*/</script>
+<script>/*ORBIT*/</script>
+<script>
+(function(){
+'use strict';
+const $ = (s) => document.querySelector(s);
+function fail(e){ const b=$('#err'); b.style.display='block'; b.textContent='Ошибка: '+(e&&e.stack||e); console.error(e); }
+window.addEventListener('error', (e)=>fail(e.error||e.message));
+
+let MAN, FRM, INF;
+try {
+  MAN = JSON.parse($('#manifest').textContent);
+  FRM = JSON.parse($('#frames').textContent);
+  INF = JSON.parse($('#info').textContent);
+} catch(e){ fail(e); return; }
+
+// ---------- декод геометрии ----------
+const raw = atob($('#bin').textContent.trim());
+const buf = new Uint8Array(raw.length);
+for (let i=0;i<raw.length;i++) buf[i] = raw.charCodeAt(i);
+const dv = new DataView(buf.buffer);
+
+function geomOf(p){
+  const g = new THREE.BufferGeometry();
+  const pos = new Float32Array(p.nv*3);
+  const nrm = new Float32Array(p.nv*3);
+  for (let i=0;i<p.nv;i++){
+    for (let k=0;k<3;k++){
+      pos[i*3+k] = p.lo[k] + dv.getInt16(p.off_pos + (i*3+k)*2, true) * p.scale[k];
+      nrm[i*3+k] = dv.getInt8(p.off_nrm + (i*3+k)) / 127;
+    }
+  }
+  const idx = new Uint32Array(p.nt*3);
+  for (let i=0;i<p.nt*3;i++) idx[i] = dv.getUint32(p.off_idx + i*4, true);
+  g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  g.setAttribute('normal',   new THREE.BufferAttribute(nrm,3));
+  g.setIndex(new THREE.BufferAttribute(idx,1));
+  g.computeBoundingSphere();
+  return g;
+}
+
+// ---------- сцена ----------
+const view = $('#view');
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.localClippingEnabled = true;
+view.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+function themeColor(name){
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return new THREE.Color(v || '#eef0f3');
+}
+scene.background = themeColor('--bg');
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.5, 5000);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x404a55, 0.85));
+const key = new THREE.DirectionalLight(0xffffff, 1.05); key.position.set(60,90,70); scene.add(key);
+const fill = new THREE.DirectionalLight(0xffffff, 0.45); fill.position.set(-70,-40,-50); scene.add(fill);
+const rim = new THREE.DirectionalLight(0xffffff, 0.5); rim.position.set(-30,30,-90); scene.add(rim);
+
+const grid = new THREE.GridHelper(240, 24, 0x8a949f, 0x8a949f);
+grid.material.opacity = 0.18; grid.material.transparent = true; scene.add(grid);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ()=>{
+  scene.background = themeColor('--bg');
+});
+
+const root = new THREE.Group(); scene.add(root);
+const clipPlane = new THREE.Plane(new THREE.Vector3(0,0,-1), 0);
+const meshes = {}; const labels = {};
+
+const order = MAN.order || Object.keys(MAN.parts);
+for (const name of order){
+  const p = MAN.parts[name]; if (!p) continue;
+  const mat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(p.color || '#9aa3ad'),
+    metalness: p.metalness !== undefined ? p.metalness : 0.15,
+    roughness: p.roughness !== undefined ? p.roughness : 0.62,
+    side: THREE.DoubleSide,
+    transparent: !!p.opacity, opacity: p.opacity || 1,
+    clippingPlanes: []
+  });
+  const m = new THREE.Mesh(geomOf(p), mat);
+  m.name = name;
+  m.userData.rest = p.rest || null;
+  root.add(m); meshes[name] = m;
+}
+
+// ---------- кадры ----------
+const T = (FRM.t && FRM.t.length) ? FRM.t : [0, 1];
+const FP = FRM.parts || {};
+const DUR = INF.duration || T[T.length-1] || 1;
+
+function poseAt(name, t){
+  const tr = FP[name];
+  if (!tr) return null;
+  const ts = tr.t || T;
+  let i = 0;
+  if (t <= ts[0]) i = 0;
+  else if (t >= ts[ts.length-1]) i = ts.length-2;
+  else { while (i < ts.length-2 && ts[i+1] < t) i++; }
+  const t0 = ts[i], t1 = ts[i+1] || ts[i]+1e-6;
+  let a = (t - t0) / Math.max(t1-t0, 1e-6); a = Math.max(0, Math.min(1, a));
+  const p0 = tr.p ? tr.p[i] : [0,0,0], p1 = tr.p ? tr.p[i+1] : p0;
+  const q0 = tr.q ? tr.q[i] : [0,0,0,1], q1 = tr.q ? tr.q[i+1] : q0;
+  const p = new THREE.Vector3(
+    THREE.MathUtils.lerp(p0[0],p1[0],a),
+    THREE.MathUtils.lerp(p0[1],p1[1],a),
+    THREE.MathUtils.lerp(p0[2],p1[2],a));
+  const q = new THREE.Quaternion(q0[0],q0[1],q0[2],q0[3])
+    .slerp(new THREE.Quaternion(q1[0],q1[1],q1[2],q1[3]), a);
+  return {p, q};
+}
+
+function apply(t){
+  for (const name of Object.keys(meshes)){
+    const m = meshes[name];
+    const cur = poseAt(name, t);
+    if (!cur){ m.matrixAutoUpdate = true; m.position.set(0,0,0); m.quaternion.identity(); continue; }
+    const r = m.userData.rest || {p:[0,0,0], q:[0,0,0,1]};
+    const rp = new THREE.Vector3(r.p[0],r.p[1],r.p[2]);
+    const rq = new THREE.Quaternion(r.q[0],r.q[1],r.q[2],r.q[3]);
+    const one = new THREE.Vector3(1,1,1);
+    m.matrixAutoUpdate = false;
+    // поза кадра — абсолютная, геометрия запечена в опорной позе:
+    // применяем M(t) * M_rest^-1
+    const M = new THREE.Matrix4().compose(cur.p, cur.q, one);
+    const Rinv = new THREE.Matrix4().compose(rp, rq, one).invert();
+    m.matrix.multiplyMatrices(M, Rinv);
+    m.matrixWorldNeedsUpdate = true;
+  }
+}
+
+// ---------- камера ----------
+const box = new THREE.Box3();
+function sceneBox(){
+  // габарит по всей анимации, а не по одному кадру: иначе объект вылезает за кадр
+  const save = t;
+  box.makeEmpty();
+  const n = Math.max(1, Math.min(40, T.length));
+  for (let i = 0; i < n; i++){
+    const tt = T[Math.round(i * (T.length - 1) / Math.max(1, n - 1))];
+    apply(tt); root.updateMatrixWorld(true);
+    for (const nm in meshes) if (meshes[nm].visible) box.expandByObject(meshes[nm]);
+  }
+  apply(save); root.updateMatrixWorld(true);
+  return box;
+}
+let camTarget = new THREE.Vector3();
+function fit(dir){
+  const b = sceneBox(); if (b.isEmpty()) return;
+  const center = b.getCenter(new THREE.Vector3());
+  const fwd = new THREE.Vector3(dir[0],dir[1],dir[2]).normalize();      // от центра к камере
+  const upHint = Math.abs(fwd.y) > 0.95 ? new THREE.Vector3(0,0,1) : new THREE.Vector3(0,1,0);
+  const right = new THREE.Vector3().crossVectors(upHint, fwd).normalize();
+  const up = new THREE.Vector3().crossVectors(fwd, right).normalize();
+
+  // если открыта боковая панель — целимся в свободную часть экрана
+  const panelOn = $('#side').classList.contains('on');
+  const pw = panelOn ? Math.min(0.35, 300 / innerWidth) : 0;
+  // верхняя шапка и нижний таймлайн тоже занимают место
+  const MT = 0.075, MB = 0.135;
+
+  const tv = Math.tan(camera.fov*Math.PI/360);
+  const tvEff = tv * (1 - MT - MB);
+  const th = tv * camera.aspect * (1 - pw);
+  let d = 1;
+  const p = new THREE.Vector3();
+  for (let i=0;i<8;i++){
+    p.set(i&1?b.max.x:b.min.x, i&2?b.max.y:b.min.y, i&4?b.max.z:b.min.z).sub(center);
+    const along = p.dot(fwd);
+    d = Math.max(d, Math.abs(p.dot(up))/tvEff - along, Math.abs(p.dot(right))/th - along);
+  }
+  d *= 1.06;
+
+  const shift = right.clone().multiplyScalar(d * tv * camera.aspect * pw * 0.5)
+    .add(up.clone().multiplyScalar(d * tv * (MB - MT)));
+  camera.position.copy(center).add(shift).add(fwd.clone().multiplyScalar(d));
+  camera.near = Math.max(0.1, d * 0.01); camera.far = d * 20 + 500;
+  camera.updateProjectionMatrix();
+  controls.target.copy(center).add(shift); camTarget.copy(controls.target); controls.update();
+}
+const CAMS = {iso:[1,0.75,1.25], top:[0,1,0.001], front:[0,0.15,1], side:[1,0.15,0]};
+
+// ---------- интерфейс ----------
+$('#title').textContent = INF.title || 'Демонстрация';
+$('#sub').textContent = INF.subtitle || '';
+
+const chk = $('#checks');
+(INF.checks||[]).forEach(c=>{
+  const d = document.createElement('div'); d.className='chk';
+  d.innerHTML = '<span>'+c.name+'</span><span class="v '+(c.ok?'ok':'bad')+'">'+(c.value!==undefined?c.value:(c.ok?'PASS':'FAIL'))+'</span>';
+  chk.appendChild(d);
+});
+if (!(INF.checks||[]).length) chk.innerHTML = '<div class="par">нет данных</div>';
+
+const par = $('#params');
+Object.entries(INF.params||{}).forEach(([k,v])=>{
+  const d=document.createElement('div'); d.className='par';
+  d.innerHTML='<span>'+k+'</span><b>'+v+'</b>'; par.appendChild(d);
+});
+if (!Object.keys(INF.params||{}).length) par.innerHTML = '<div class="par">нет данных</div>';
+
+const leg = $('#legend');
+const visState = {};
+Object.keys(MAN.parts).forEach(name=>{
+  const p = MAN.parts[name];
+  const d = document.createElement('div'); d.className='lg';
+  d.innerHTML = '<i style="background:'+(p.color||'#999')+'"></i><span>'+(p.label||name)+'</span>';
+  d.onclick = ()=>{ const on = !(visState[name]!==false); visState[name] = !on; meshes[name].visible = on; d.classList.toggle('off', !on); };
+  leg.appendChild(d);
+});
+
+let playing = false, t = 0, speed = 1, last = 0;
+const tm = $('#tm'), tmLabel = $('#tmLabel');
+function setT(v){ t = Math.max(0, Math.min(DUR, v)); tm.value = String(Math.round(1000*t/DUR)); apply(t); updateLabels(); }
+function updateLabels(){
+  tmLabel.textContent = t.toFixed(2)+' / '+DUR.toFixed(2)+' с';
+  const ph = (INF.phases||[]).find(p=>t>=p.t0 && t<=p.t1) || null;
+  $('#phase').textContent = ph ? ph.name : '';
+  $('#note').textContent = ph ? (ph.note||'') : '';
+}
+$('#play').onclick = ()=>{ playing = !playing; $('#play').textContent = playing?'❚❚ пауза':'▶ пуск'; $('#play').classList.toggle('on', playing); last = performance.now(); };
+$('#restart').onclick = ()=>{ setT(0); };
+tm.oninput = ()=>{ setT(DUR*Number(tm.value)/1000); };
+document.querySelectorAll('.spd').forEach(b=>{
+  b.onclick = ()=>{ speed = Number(b.dataset.s); document.querySelectorAll('.spd').forEach(x=>x.classList.toggle('on', x===b)); };
+});
+document.querySelectorAll('.cam').forEach(b=>{ b.onclick = ()=>fit(CAMS[b.dataset.c]); });
+$('#panelBtn').onclick = ()=>{ $('#side').classList.toggle('on'); $('#panelBtn').classList.toggle('on'); };
+
+let clipOn = false;
+$('#clipBtn').onclick = ()=>{
+  clipOn = !clipOn;
+  $('#clipBtn').classList.toggle('on', clipOn);
+  $('#clipAxis').style.display = clipOn?'':'none';
+  $('#clipPos').style.display = clipOn?'':'none';
+  applyClip();
+};
+function applyClip(){
+  const v = $('#clipAxis').value;
+  const b = sceneBox(); const c = b.getCenter(new THREE.Vector3());
+  const ax = {x:[1,0,0],y:[0,1,0],z:[0,0,1]};
+  const base = ax[v[0]]; const sign = v.length>1 && v[1]==='-' ? -1 : 1;
+  const n = new THREE.Vector3(base[0]*sign, base[1]*sign, base[2]*sign);
+  const span = Math.max(1, b.getSize(new THREE.Vector3()).length());
+  const off = (Number($('#clipPos').value)/100 - 0.5) * span + c.dot(n);
+  clipPlane.normal.copy(n); clipPlane.constant = -off;
+  for (const nm in meshes){
+    const m = meshes[nm];
+    m.material.clippingPlanes = clipOn ? [clipPlane] : [];
+    m.material.needsUpdate = true;
+  }
+}
+$('#clipAxis').onchange = applyClip; $('#clipPos').oninput = applyClip;
+
+// ---------- цикл ----------
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.1, (now - last)/1000 || 0); last = now;
+  if (playing){ let nt = t + dt*speed; if (nt >= DUR){ nt = DUR; playing = false; $('#play').textContent='▶ пуск'; $('#play').classList.remove('on'); } setT(nt); }
+  controls.update();
+  renderer.render(scene, camera);
+}
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ---------- параметры в адресной строке: #t=3.5&panel=1&play=1&clip=z ----------
+const H = new URLSearchParams(location.hash.replace(/^#/, ''));
+if (H.get('panel') === '1'){ $('#side').classList.add('on'); $('#panelBtn').classList.add('on'); }
+if (H.get('clip')){ $('#clipAxis').value = H.get('clip'); $('#clipBtn').click(); }
+if (H.get('play') === '1'){ $('#play').click(); }
+
+setT(Number(H.get('t')) || 0); fit(CAMS[H.get('cam')] ? CAMS[H.get('cam')] : CAMS.iso);
+updateLabels(); requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
