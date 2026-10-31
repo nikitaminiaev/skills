@@ -119,7 +119,8 @@ function geomOf(p){
   const nrm = new Float32Array(p.nv*3);
   for (let i=0;i<p.nv;i++){
     for (let k=0;k<3;k++){
-      pos[i*3+k] = p.lo[k] + dv.getInt16(p.off_pos + (i*3+k)*2, true) * p.scale[k];
+      // упаковщик пишет q-32768 как знаковый int16; возвращаем q обратно
+      pos[i*3+k] = p.lo[k] + (dv.getInt16(p.off_pos + (i*3+k)*2, true) + 32768) * p.scale[k];
       nrm[i*3+k] = dv.getInt8(p.off_nrm + (i*3+k)) / 127;
     }
   }

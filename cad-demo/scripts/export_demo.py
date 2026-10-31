@@ -122,7 +122,8 @@ def pack_part(shape: Shape, tol: float, ang: float, smooth: float):
     scale = [(hi[k] - lo[k]) / 65535.0 if hi[k] > lo[k] else 1e-6 for k in range(3)]
 
     # позиции: квантуем в 0..65535 и сдвигаем на -32768, чтобы знаковый int16
-    # покрывал весь диапазон без SpecialCase-веток при чтении
+    # покрывал весь диапазон. Вьюер прибавляет 32768 обратно; без этого каждая
+    # деталь со смещённым центром уезжает на половину своего габарита.
     qp = bytearray()
     for p in P:
         for k in range(3):
