@@ -102,3 +102,56 @@ for p in plan["parts"]:
         x, y = p[key]
         assert -45 <= x <= 45 and -92 <= y <= 98, (p["name"], key, x, y)
 ```
+
+## 5. HAL: компонент-«оператор» (кнопки + скрипт в одном сигнале)
+
+У сигнала ровно один источник, поэтому кнопки панели и авто-пуск сводятся
+в userspace-компоненте:
+
+```python
+import hal
+
+c = hal.component("machine-safety")
+for p in ("ui-reset", "ui-machine-on", "ui-home", "script-reset",
+          "script-machine-on", "script-home", "script-auto", "script-run"):
+    c.newpin(p, hal.HAL_BIT, hal.HAL_IN)
+for p in ("reset-out", "machine-on-out", "home-out", "auto-out", "run-out"):
+    c.newpin(p, hal.HAL_BIT, hal.HAL_OUT)
+c.ready()
+
+while True:                      # или update-функция с потоком
+    c["reset-out"] = bool(c["ui-reset"] or c["script-reset"])
+    c["machine-on-out"] = bool(c["ui-machine-on"] or c["script-machine-on"])
+    c["home-out"] = bool(c["ui-home"] or c["script-home"])
+    c["auto-out"] = bool(c["ui-auto"] or c["script-auto"])
+    c["run-out"] = bool(c["ui-run"] or c["script-run"])
+```
+
+```bash
+loadusr -Wn machine-safety ./machine_safety.py
+net reset machine-safety.reset-out => estop.reset
+net machine_on machine-safety.machine-on-out => halui.machine.on
+```
+
+## 6. vismach: события захвата без потери кадра
+
+```python
+import threading, time, collections
+
+EV = collections.deque(maxlen=10000)
+
+def watcher():                  # 2 мс — много быстрее кадра (~5 Гц)
+    prev = 0
+    while True:
+        g = bool(comp["grip"])
+        if g != prev:
+            EV.append((time.monotonic(), g, comp["jointX"],
+                       comp["jointY"], comp["jointZ"]))
+            prev = g
+        time.sleep(0.002)
+
+threading.Thread(target=watcher, daemon=True).start()
+```
+
+Состояние детали менять в `traverse()` по событиям из `EV`, а не по текущему
+пину: иначе фронт теряется между кадрами.
