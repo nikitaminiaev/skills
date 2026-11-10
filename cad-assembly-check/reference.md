@@ -108,3 +108,55 @@ d.Perform(); print(d.Value())                        # вблизи 7
 - Освещение в листовом рендере не «волшебное» — чтобы не путать окраску по нормали
   (render_preview-style) с окраской по группе: красить строго по группе, свет — лемберт
   одним направлением.
+## WebGL-viewer (render_views.py + view_template.html)
+
+Проверено 2026-11-10, Chrome 156, Debian 13, без GPU.
+
+- **Тесселяция.** `Shape.tessellate(tol)` в build123d 0.11 переиспользует уже
+  готовую сетку: tol=0.05/0.2/0.6/2.0 дают одинаковые 100 треугольников на
+  цилиндр. Реальный регулятор — угловой допуск. Перед съёмом чистить старую
+  триангуляцию и мешить заново:
+  `BRepTools.Clean_s(shp.wrapped)` → `BRepMesh_IncrementalMesh(wrapped, tol, False, ang, True)`.
+  Замер на цилиндре: ang=0.5 → 500, 0.05 → 1004, 0.02 → 2512 треугольников;
+  время — доли секунды. tol почти не влияет, ang — влияет.
+- **Цвет.** three.js r2021 не включает color management: `new THREE.Color('#8899aa')`
+  трактуется как линейный, а `outputEncoding = sRGBEncoding` + ACES выбеливает
+  материал почти в белый. Лечится `new THREE.Color(hex).convertSRGBToLinear()`
+  и `toneMappingExposure ≈ 1.0`.
+- **Headless Chrome.** `--headless=new --disable-gpu --use-angle=swiftshader
+  --no-sandbox --disable-dev-shm-usage --hide-scrollbars --force-device-scale-factor=1
+  --window-size=W,H --virtual-time-budget=8000 --run-all-compositor-stages-before-draw
+  --screenshot=out.png file:///…/view.html?shot=1`. В headless `webgl2=true`;
+  кадр 600×400 — около 1 с, 2000×1400 — 2–5 с. `?shot=1` прячет панель UI
+  (класс `body.shot`), оставляя линейку и подписи.
+- **Модель в HTML.** Вершины/индексы — base64 от `Float32Array`/`Uint32Array`,
+  один `BufferGeometry` на тело. 280 тел мелкой сеткой дают сотни МБ — для
+  интерактивного файла брать `context_angular ≥ 0.6`, для PNG-зума мелкую
+  сетку только выбранным телам (`--only`), контекст — грубо.
+- **Врезка и оси** — второй проход `renderer.setViewport/setScissor` в тот же
+  canvas. Объекты, которые должны быть видны только во врезке (рамка зума),
+  класть на слой 1 и `insetCam.layers.enable(1)`: главная камера их не видит.
+- **Clip-плоскость.** `THREE.Plane(normal, constant)`; при `normal = -axis`
+  остаётся половина с координатой `< pos`. `flip` в CLI меняет знак нормали.
+  `renderer.localClippingEnabled = true`, у материалов `clippingPlanes`.
+- **Тени** — `ShadowMaterial` на полу (небо 0.16) + один directional с
+  `PCFSoftShadowMap`; для ортокамеры `shadow.camera` подгонять под габарит,
+  иначе тень обрезается.
+- **Габарит и камера.** Ортокамера: `size` — вертикальное поле, ширина =
+  `size × aspect`. `fit_view` берёт bbox выбранных тел × 1.25. Для зума на
+  мелкий узел контекст оставлять призраком (`--ghost`), иначе соседние тела
+  закрывают кадр.
+- **Повторные виды.** Лист — это 6 кадров одной сцены; без кэша каждый кадр
+  мешает все тела заново (280 тел — минуты). Кэш `(id(shape), angular)`
+  в `render_views.py` + `--batch` (JSON-список видов) режут это до одного
+  прохода тесселяции. Мелкая сетка (`--angular`) — только телам из `--only`;
+  без `--only` весь кадр идёт по `--context-angular` (0.25 по умолчанию).
+- **Скорость кадра.** 280 тел, 1600×1100, SwiftShader: ~30–60 с на кадр;
+  из них заметная доля — `EdgesGeometry` и карта теней 2048². Если кадров
+  много, сначала уменьшать `--context-angular` и разрешение, потом тени.
+- **`--virtual-time-budget` — это не «сколько ждать загрузку».** Chrome крутит
+  `requestAnimationFrame` в виртуальном времени: 8000 мс ≈ 480 полных кадров.
+  Для 246 тел кадр ~0,5 с, то есть 4 минуты на один PNG. Ставить 400 мс
+  (≈24 кадра): последний кадр остаётся на экране, скриншот снимается после
+  бюджета. Если убрать `requestAnimationFrame` совсем, canvas выходит чёрным —
+  композитор не успевает показать кадр.

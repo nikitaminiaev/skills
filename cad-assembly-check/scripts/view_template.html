@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__TITLE__</title>
+<style>
+:root{--bg:#eef0f3;--fg:#1b2026;--mut:#5b6670;--pan:#ffffffe8;--line:#8a949f33;--acc:#2b62c9}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font:13px/1.35 system-ui,"Segoe UI",Roboto,sans-serif}
+#app{position:fixed;inset:0}
+#app canvas{display:block}
+#ui{position:fixed;left:10px;right:10px;top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:7px 10px;background:var(--pan);border-radius:9px;box-shadow:0 2px 10px #0002;backdrop-filter:blur(6px);z-index:5}
+#ui h1{font-size:14px;font-weight:600;margin:0 10px 0 0;white-space:nowrap}
+#ui .sep{width:1px;height:18px;background:var(--line);margin:0 4px}
+button,select{font:inherit;font-size:12.5px;padding:3px 9px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--fg);cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+label.chk{display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;font-size:12.5px}
+#clipWrap{display:none;align-items:center;gap:6px}
+#clipWrap.on{display:inline-flex}
+#clip{width:130px;accent-color:var(--acc)}
+#hint{position:fixed;left:12px;bottom:12px;color:var(--mut);font-size:11.5px;z-index:4}
+#labels{position:fixed;inset:0;pointer-events:none;z-index:3;overflow:hidden}
+.lbl{position:absolute;transform:translate(-50%,-145%);background:#ffffffe0;border:1px solid #00000024;border-radius:5px;padding:1px 5px;font-size:11px;white-space:nowrap;box-shadow:0 1px 3px #0002}
+.lbl::after{content:'';position:absolute;left:50%;top:100%;width:1px;height:11px;background:#1b202666}
+#scale{position:fixed;left:14px;bottom:34px;z-index:4;color:var(--fg);font-size:11.5px;display:flex;flex-direction:column;gap:2px;align-items:flex-start}
+#scale .bar{height:5px;border-left:2px solid #1b2026;border-right:2px solid #1b2026;border-bottom:2px solid #1b2026;background:#1b202608}
+#scale .txt{font-variant-numeric:tabular-nums;color:var(--mut)}
+#legend{position:fixed;right:10px;top:58px;bottom:12px;width:250px;overflow:auto;padding:9px 11px;background:var(--pan);border-radius:9px;box-shadow:0 2px 10px #0002;display:none;z-index:4}
+#legend.on{display:block}
+#legend h2{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:0 0 6px;font-weight:600}
+.lg{display:flex;align-items:center;gap:7px;padding:2px 0;font-size:12px;cursor:pointer;user-select:none}
+.lg i{width:11px;height:11px;border-radius:2px;display:inline-block;flex:0 0 auto;border:1px solid #0002}
+.lg.off{opacity:.3}
+#insetBorder{position:fixed;right:14px;bottom:14px;width:260px;height:190px;border:1px solid #1b202640;border-radius:7px;pointer-events:none;display:none;z-index:4}
+#insetBorder.on{display:block}
+#triadBorder{position:fixed;left:14px;bottom:64px;width:96px;height:96px;border:1px solid #1b202624;border-radius:50%;pointer-events:none;display:none;z-index:4}
+#triadBorder.on{display:block}
+body.shot #ui,body.shot #hint,body.shot #legend{display:none!important}
+body.shot #scale{display:flex!important}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="labels"></div>
+<div id="ui">
+  <h1>__TITLE__</h1>
+  <button data-view="iso">Изо</button>
+  <button data-view="front">Спереди</button>
+  <button data-view="side">Сбоку</button>
+  <button data-view="top">Сверху</button>
+  <span class="sep"></span>
+  <label class="chk"><input type="checkbox" id="edges" checked> контуры</label>
+  <label class="chk"><input type="checkbox" id="labelsChk"> подписи</label>
+  <label class="chk"><input type="checkbox" id="ghostChk"> призрак</label>
+  <label class="chk"><input type="checkbox" id="insetChk"> врезка</label>
+  <span class="sep"></span>
+  <label class="chk"><input type="checkbox" id="clipChk"> разрез</label>
+  <span id="clipWrap"><select id="clipAxis"><option value="x">X</option><option value="y">Y</option><option value="z" selected>Z</option></select><input type="range" id="clip" min="0" max="1000" value="500"></span>
+  <span class="sep"></span>
+  <button id="legendBtn">легенда</button>
+  <button id="shotBtn">PNG</button>
+  <button id="resetBtn">сброс</button>
+</div>
+<div id="legend"><h2>типы деталей</h2><div id="legendList"></div></div>
+<div id="scale"><div class="bar" id="scaleBar"></div><div class="txt" id="scaleTxt"></div></div>
+<div id="insetBorder"></div>
+<div id="triadBorder"></div>
+<div id="hint">ЛКМ — вращать · ПКМ — панорама · колесо — зум · #t=x,y,z&d=60&az=35&el=25 — камера в ссылке</div>
+<script>__THREE__</script>
+<script>__ORBIT__</script>
+<script>
+const MODEL = __MODEL__;
+const VIEW = __VIEW__;
+const SHOT = new URLSearchParams(location.search).has('shot');
+if (SHOT) document.body.classList.add('shot');
+
+const W = () => innerWidth, H = () => innerHeight;
+const BG = new THREE.Color(`rgb(${VIEW.bg.join(',')})`);
+const renderer = new THREE.WebGLRenderer({antialias:true, preserveDrawingBuffer:true});
+renderer.setPixelRatio(1);
+renderer.setSize(W(), H());
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.localClippingEnabled = true;
+renderer.autoClear = true;
+document.getElementById('app').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+renderer.setClearColor(BG, 1);
+
+const planes = [];
+if (VIEW.clip) {
+  const [axis, pos, flip] = VIEW.clip;
+  const n = new THREE.Vector3(axis==='x'?1:0, axis==='y'?1:0, axis==='z'?1:0);
+  if (!flip) n.negate();
+  planes.push(new THREE.Plane(n, flip ? -pos : pos));
+}
+
+function decode(b64, Ctor) {
+  const s = atob(b64);
+  const u = new Uint8Array(s.length);
+  for (let i=0;i<s.length;i++) u[i] = s.charCodeAt(i);
+  return new Ctor(u.buffer);
+}
+function glob(p, s) {
+  const re = new RegExp('^' + p.split('*').map(x => x.replace(/[.+^${}()|[\]\\]/g, '\\$&')).join('.*') + '$');
+  return re.test(s);
+}
+const only = VIEW.only || [];
+const isSel = name => !only.length || only.some(p => glob(p, name));
+
+const root = new THREE.Group();
+scene.add(root);
+const meshes = [];
+for (const b of MODEL.bodies) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(decode(b.pos, Float32Array), 3));
+  g.setIndex(new THREE.BufferAttribute(decode(b.idx, Uint32Array), 1));
+  g.computeBoundingSphere();
+  const mat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(b.color).convertSRGBToLinear(), roughness: 0.75, metalness: 0.03,
+    flatShading: true, clippingPlanes: planes, clipShadows: true,
+  });
+  const mesh = new THREE.Mesh(g, mat);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  mesh.userData.body = b;
+  mesh.userData.visible = true;
+  root.add(mesh);
+  let lines = null;
+  if (true) {
+    const eg = new THREE.EdgesGeometry(g, 30);
+    lines = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({
+      color: 0x1b2026, transparent: true, opacity: 0.34, clippingPlanes: planes,
+    }));
+    root.add(lines);
+  }
+  mesh.userData.edges = lines;
+  meshes.push(mesh);
+}
+
+// Призрак: выбранное — плотно, остальное — почти прозрачно.
+function applyGhost(on) {
+  for (const m of meshes) {
+    const sel = isSel(m.userData.body.name);
+    const ghost = on && !sel;
+    m.material.transparent = ghost;
+    m.material.opacity = ghost ? 0.05 : 1.0;
+    m.material.depthWrite = !ghost;
+    m.castShadow = !ghost;
+    m.receiveShadow = !ghost;
+    if (m.userData.edges) m.userData.edges.material.opacity = ghost ? 0.035 : 0.34;
+  }
+}
+if (VIEW.ghost) applyGhost(true);
+
+// Границы видимых тел.
+const box = new THREE.Box3();
+for (const m of meshes) box.expandByObject(m);
+const center = box.getCenter(new THREE.Vector3());
+const span = box.getSize(new THREE.Vector3());
+const maxDim = Math.max(span.x, span.y, span.z, 1);
+const target = VIEW.target ? new THREE.Vector3(...VIEW.target) : center.clone();
+const field = VIEW.size || maxDim * 1.25;
+const az = THREE.MathUtils.degToRad(VIEW.az);
+const el = THREE.MathUtils.degToRad(VIEW.el);
+const dir = new THREE.Vector3(
+  Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az)
+).normalize();
+
+function makeCam(aspect, size) {
+  const c = new THREE.OrthographicCamera(-1, 1, 1, -1, -1e6, 1e6);
+  c.left = -size / 2 * aspect; c.right = size / 2 * aspect;
+  c.top = size / 2; c.bottom = -size / 2;
+  c.position.copy(target).addScaledVector(dir, maxDim * 4 + 2000);
+  c.up.set(0, 1, 0);
+  c.lookAt(target);
+  c.updateProjectionMatrix();
+  return c;
+}
+const cam = makeCam(W() / H(), field);
+const controls = new THREE.OrbitControls(cam, renderer.domElement);
+controls.target.copy(target);
+controls.enableDamping = true;
+controls.dampingFactor = 0.09;
+controls.screenSpacePanning = true;
+controls.update();
+
+// Свет: мягкий студийный, тени на полу.
+scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa4b2, 0.45));
+const key = new THREE.DirectionalLight(0xffffff, 1.0);
+key.position.copy(center).add(new THREE.Vector3(maxDim * 1.2, maxDim * 2.0, maxDim * 1.4));
+key.castShadow = true;
+key.shadow.mapSize.set(1024, 1024);
+key.shadow.camera.left = -maxDim * 1.8;
+key.shadow.camera.right = maxDim * 1.8;
+key.shadow.camera.top = maxDim * 1.8;
+key.shadow.camera.bottom = -maxDim * 1.8;
+key.shadow.camera.near = 0.1;
+key.shadow.camera.far = maxDim * 8;
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xffffff, 0.28);
+fill.position.copy(center).add(new THREE.Vector3(-maxDim * 1.6, maxDim * 0.8, -maxDim * 1.2));
+scene.add(fill);
+
+let ground = null;
+if (Math.abs(VIEW.el) > 2) {
+  ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(maxDim * 8, maxDim * 8),
+    new THREE.ShadowMaterial({opacity: 0.16})
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(center.x, box.min.y - 0.4, center.z);
+  ground.receiveShadow = true;
+  scene.add(ground);
+}
+
+// Подписи.
+const labelLayer = document.getElementById('labels');
+let labelItems = [];
+function buildLabels() {
+  labelLayer.innerHTML = '';
+  labelItems = [];
+  if (!VIEW.labels && !document.getElementById('labelsChk').checked) return;
+  for (const m of meshes) {
+    const b = m.userData.body;
+    if (!isSel(b.name)) continue;
+    // Крепёж не подписываем: «нога B слой 1/гайка6» — шум, а не ориентир.
+    if (b.name.includes('/')) continue;
+    if (labelItems.length >= 24) break;
+    const d = document.createElement('div');
+    d.className = 'lbl';
+    d.textContent = b.name;
+    labelLayer.appendChild(d);
+    labelItems.push({d, p: new THREE.Vector3(...b.center)});
+  }
+}
+function updateLabels() {
+  for (const it of labelItems) {
+    const v = it.p.clone().project(cam);
+    it.d.style.left = ((v.x * 0.5 + 0.5) * W()) + 'px';
+    it.d.style.top = ((-v.y * 0.5 + 0.5) * H()) + 'px';
+    it.d.style.display = (v.z > 1 || v.z < -1) ? 'none' : '';
+  }
+}
+
+// Масштабная линейка.
+const scaleBar = document.getElementById('scaleBar');
+const scaleTxt = document.getElementById('scaleTxt');
+function updateScale() {
+  const mmPerPx = (cam.top - cam.bottom) / cam.zoom / H();
+  const nice = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000];
+  const len = nice.find(v => v / mmPerPx >= 70) || 2000;
+  scaleBar.style.width = (len / mmPerPx) + 'px';
+  scaleTxt.textContent = len + ' мм';
+}
+
+// Врезка общего вида с рамкой зума.
+let insetCam = null;
+const insetBorder = document.getElementById('insetBorder');
+const viewDir = new THREE.Vector3();
+function currentDir() {
+  return viewDir.subVectors(cam.position, controls.target).normalize();
+}
+function makeInset() {
+  const aspect = 260 / 190;
+  const size = maxDim * 1.35;
+  const c = new THREE.OrthographicCamera(-1, 1, 1, -1, -1e6, 1e6);
+  c.left = -size / 2 * aspect; c.right = size / 2 * aspect;
+  c.top = size / 2; c.bottom = -size / 2;
+  c.position.copy(center).addScaledVector(dir, maxDim * 4 + 2000);
+  c.up.set(0, 1, 0); c.lookAt(center); c.updateProjectionMatrix();
+  c.layers.enable(1);
+  return c;
+}
+
+// Рамка зума: прямоугольник поля главной камеры на плоскости цели.
+// Живёт на слое 1 — виден только во врезке, в основном кадре не мешает.
+const zoomFrame = new THREE.LineLoop(
+  new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(), new THREE.Vector3(),
+    new THREE.Vector3(), new THREE.Vector3()]),
+  new THREE.LineBasicMaterial({color: 0x2b62c9, depthTest: false, transparent: true, opacity: 0.95})
+);
+zoomFrame.layers.set(1);
+zoomFrame.renderOrder = 10;
+scene.add(zoomFrame);
+function updateZoomFrame() {
+  const hw = (cam.right - cam.left) / 2 / cam.zoom;
+  const hh = (cam.top - cam.bottom) / 2 / cam.zoom;
+  const d = currentDir();
+  const right = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 1, 0));
+  if (right.lengthSq() < 1e-9) right.set(1, 0, 0);
+  right.normalize();
+  const upv = new THREE.Vector3().crossVectors(right, d).normalize();
+  const c = controls.target;
+  zoomFrame.geometry.setFromPoints([
+    c.clone().addScaledVector(right, -hw).addScaledVector(upv, -hh),
+    c.clone().addScaledVector(right,  hw).addScaledVector(upv, -hh),
+    c.clone().addScaledVector(right,  hw).addScaledVector(upv,  hh),
+    c.clone().addScaledVector(right, -hw).addScaledVector(upv,  hh),
+  ]);
+  zoomFrame.geometry.attributes.position.needsUpdate = true;
+  zoomFrame.geometry.computeBoundingSphere();
+}
+
+function renderInset() {
+  if (!insetCam) return;
+  const aspect = 260 / 190;
+  const size = maxDim * 1.35;
+  insetCam.left = -size / 2 * aspect; insetCam.right = size / 2 * aspect;
+  insetCam.top = size / 2; insetCam.bottom = -size / 2;
+  insetCam.position.copy(center).addScaledVector(currentDir(), maxDim * 4 + 2000);
+  insetCam.up.set(0, 1, 0); insetCam.lookAt(center);
+  insetCam.updateProjectionMatrix();
+  updateZoomFrame();
+  const w = 260, h = 190, x = W() - w - 14, y = 14;
+  renderer.setScissorTest(true);
+  renderer.setViewport(x, y, w, h);
+  renderer.setScissor(x, y, w, h);
+  renderer.setClearColor(BG, 1);
+  renderer.clear(true, true, false);
+  renderer.render(scene, insetCam);
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, W(), H());
+  renderer.setScissor(0, 0, W(), H());
+}
+
+// Оси в углу.
+const triScene = new THREE.Scene();
+const triCam = new THREE.OrthographicCamera(-1.45, 1.45, 1.45, -1.45, -20, 20);
+triScene.add(new THREE.AxesHelper(1));
+triCam.position.copy(dir).multiplyScalar(6);
+triCam.lookAt(0, 0, 0);
+const triadBorder = document.getElementById('triadBorder');
+function renderTriad() {
+  const s = 96, x = 14, y = 64;
+  renderer.setScissorTest(true);
+  renderer.setViewport(x, y, s, s);
+  renderer.setScissor(x, y, s, s);
+  renderer.setClearColor(BG, 1);
+  renderer.clear(true, true, false);
+  renderer.render(triScene, triCam);
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, W(), H());
+  renderer.setScissor(0, 0, W(), H());
+}
+
+// Разрез: ползунок двигает плоскость.
+const clipChk = document.getElementById('clipChk');
+const clipWrap = document.getElementById('clipWrap');
+const clipAxis = document.getElementById('clipAxis');
+const clipRange = document.getElementById('clip');
+let clipPlane = planes[0] || null;
+function setClip(on) {
+  clipWrap.classList.toggle('on', on);
+  for (const m of meshes) {
+    m.material.clippingPlanes = on && clipPlane ? [clipPlane] : [];
+    m.material.needsUpdate = true;
+    if (m.userData.edges) m.userData.edges.material.clippingPlanes = m.material.clippingPlanes;
+  }
+}
+function resetClipPlane() {
+  const axis = clipAxis.value;
+  const lo = axis === 'x' ? box.min.x : axis === 'y' ? box.min.y : box.min.z;
+  const hi = axis === 'x' ? box.max.x : axis === 'y' ? box.max.y : box.max.z;
+  clipRange.min = lo; clipRange.max = hi; clipRange.value = (lo + hi) / 2;
+  const n = new THREE.Vector3(axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0);
+  n.negate();
+  clipPlane = new THREE.Plane(n, (lo + hi) / 2);
+}
+resetClipPlane();
+clipChk.addEventListener('change', () => setClip(clipChk.checked));
+clipAxis.addEventListener('change', () => { resetClipPlane(); setClip(clipChk.checked); });
+clipRange.addEventListener('input', () => {
+  if (!clipPlane) return;
+  clipPlane.constant = +clipRange.value;
+  setClip(true);
+  clipChk.checked = true;
+});
+
+// Легенда: типы деталей, клик — скрыть/показать.
+const legend = document.getElementById('legend');
+const legendList = document.getElementById('legendList');
+const byKey = new Map();
+for (const b of MODEL.bodies) {
+  if (!byKey.has(b.key)) byKey.set(b.key, {color: b.color, names: []});
+  byKey.get(b.key).names.push(b.name);
+}
+for (const [k, v] of byKey) {
+  const row = document.createElement('div');
+  row.className = 'lg';
+  row.innerHTML = `<i style="background:${v.color}"></i><span>${k || '—'}</span>`;
+  row.addEventListener('click', () => {
+    row.classList.toggle('off');
+    const off = row.classList.contains('off');
+    for (const m of meshes) {
+      if (m.userData.body.key !== k) continue;
+      m.visible = !off;
+      if (m.userData.edges) m.userData.edges.visible = !off;
+    }
+  });
+  legendList.appendChild(row);
+}
+document.getElementById('legendBtn').addEventListener('click', () => legend.classList.toggle('on'));
+
+// Кнопки видов.
+function setView(name) {
+  const v = {iso: [35, 25], front: [0, 0], side: [90, 0], top: [0, 89]}[name] || [35, 25];
+  const a = THREE.MathUtils.degToRad(v[0]), e = THREE.MathUtils.degToRad(v[1]);
+  dir.set(Math.cos(e) * Math.sin(a), Math.sin(e), Math.cos(e) * Math.cos(a)).normalize();
+  cam.position.copy(controls.target).addScaledVector(dir, maxDim * 4 + 2000);
+  cam.up.set(0, 1, 0);
+  cam.lookAt(controls.target);
+  controls.update();
+}
+for (const b of document.querySelectorAll('[data-view]')) {
+  b.addEventListener('click', () => setView(b.dataset.view));
+}
+document.getElementById('resetBtn').addEventListener('click', () => {
+  controls.target.copy(target);
+  cam.zoom = 1;
+  cam.position.copy(target).addScaledVector(dir, maxDim * 4 + 2000);
+  cam.lookAt(target);
+  cam.updateProjectionMatrix();
+  controls.update();
+});
+document.getElementById('edges').addEventListener('change', e => {
+  for (const m of meshes) if (m.userData.edges) m.userData.edges.visible = e.target.checked;
+});
+document.getElementById('labelsChk').addEventListener('change', buildLabels);
+document.getElementById('ghostChk').addEventListener('change', e => applyGhost(e.target.checked));
+const insetChk = document.getElementById('insetChk');
+insetChk.checked = !!VIEW.inset;
+insetBorder.classList.toggle('on', insetChk.checked);
+insetChk.addEventListener('change', e => insetBorder.classList.toggle('on', e.target.checked));
+document.getElementById('shotBtn').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.download = MODEL.title + '.png';
+  a.href = renderer.domElement.toDataURL('image/png');
+  a.click();
+});
+
+// Камера из URL-хэша.
+function applyHash() {
+  if (!location.hash) return;
+  const q = new URLSearchParams(location.hash.slice(1));
+  if (q.has('t')) {
+    const t = q.get('t').split(',').map(Number);
+    if (t.length === 3) controls.target.set(t[0], t[1], t[2]);
+  }
+  if (q.has('d')) {
+    const d = +q.get('d');
+    if (d > 0) {
+      const aspect = W() / H();
+      cam.left = -d / 2 * aspect; cam.right = d / 2 * aspect;
+      cam.top = d / 2; cam.bottom = -d / 2; cam.updateProjectionMatrix();
+    }
+  }
+  if (q.has('az') || q.has('el')) {
+    const a = THREE.MathUtils.degToRad(+(q.get('az') || 35));
+    const e = THREE.MathUtils.degToRad(+(q.get('el') || 25));
+    dir.set(Math.cos(e) * Math.sin(a), Math.sin(e), Math.cos(e) * Math.cos(a)).normalize();
+    cam.position.copy(controls.target).addScaledVector(dir, maxDim * 4 + 2000);
+    cam.lookAt(controls.target);
+  }
+  controls.update();
+}
+applyHash();
+
+buildLabels();
+insetCam = makeInset();
+triadBorder.classList.toggle('on', !SHOT || !!VIEW.inset);
+updateScale();
+updateLabels();
+controls.addEventListener('change', () => { updateScale(); updateLabels(); updateZoomFrame(); });
+
+// Непрерывный цикл: интерактиву нужен отклик, а скриншоту — свежий кадр.
+// Сколько кадров успеет отрисовать Chrome, задаёт --virtual-time-budget
+// (по умолчанию 400 мс ≈ 24 кадра; 8000 мс = 480 кадров — минуты на кадр).
+let frameNo = 0;
+function animate() {
+  requestAnimationFrame(animate);
+  frameNo++;
+  controls.update();
+  renderer.autoClear = true;
+  renderer.setViewport(0, 0, W(), H());
+  renderer.setScissorTest(false);
+  renderer.render(scene, cam);
+  if (insetChk.checked) renderInset();
+  if (triadBorder.classList.contains('on')) renderTriad();
+  updateLabels();
+}
+animate();
+
+window.addEventListener('resize', () => {
+  renderer.setSize(W(), H());
+  const aspect = W() / H();
+  const size = cam.top - cam.bottom;
+  cam.left = -size / 2 * aspect; cam.right = size / 2 * aspect;
+  cam.updateProjectionMatrix();
+  updateScale();
+});
+</script>
+</body>
+</html>
